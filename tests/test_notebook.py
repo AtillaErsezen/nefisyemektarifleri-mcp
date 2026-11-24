@@ -241,3 +241,19 @@ def test_reads_are_retried_after_network_errors_but_changes_are_not(session_file
     with pytest.raises(H.NefisError, match="may or may not"):
         N.fetch_signed_in(N.AJAX_URL, {"action": "add_to_collection"})
     assert attempts == ["POST"]
+
+
+REAL_NOTEBOOK_CARD = """<div class="recipe-cards "><figure class="recipe-image">
+<a href="https://www.nefisyemektarifleri.com/beyaz-lahana-yemegi-1104525/" title="Beyaz Lahana Yemeği"><img src="i.jpg"></a></figure>
+<div class="recipe-info"><span class="text-area"><h3>
+<a class="title" href="https://www.nefisyemektarifleri.com/beyaz-lahana-yemegi-1104525/" title="Beyaz Lahana Yemeği">Beyaz Lahana Yemeği</a></h3>
+<a rel="nofollow" href="javascript:;" data-jshref="https://www.nefisyemektarifleri.com/u/huri_karaosmanoglueker/tarifler/" title="Ece Karaosmanoğlu" class="recipe-owner">Ece</a>
+<a rel="nofollow" href="javascript:;" data-jshref="https://www.nefisyemektarifleri.com/beyaz-lahana-yemegi-1104525/" title="2bin Deftere Eklenme" class="collection-button with-icon"><span class="count">2bin</span></a>
+<a class="delete-from-collection" href="javascript:;" data-collection="2192276" data-post_id="1104525"></a></span></div></div>"""
+
+
+def test_notebook_card_links_to_the_recipe_not_the_author():
+    card = R.parse_recipe_cards(REAL_NOTEBOOK_CARD)[0]
+    assert card["url"] == BASE + "/beyaz-lahana-yemegi-1104525/"
+    assert card["author"] == "Ece Karaosmanoğlu"
+    assert card["author_url"] == BASE + "/u/huri_karaosmanoglueker/tarifler/"

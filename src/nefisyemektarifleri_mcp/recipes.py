@@ -117,7 +117,8 @@ _CARD_SPLIT = re.compile(r'<div class="recipe-cards\s*">')  # notebook pages wri
 
 def _parse_card(chunk: str) -> dict | None:
     """One <div class='recipe-cards'> chunk -> compact recipe summary."""
-    m = re.search(r'data-jshref="(https://www\.nefisyemektarifleri\.com/[^"]+)"', chunk)
+    # (?!u/): notebook pages put the author's profile in the first data-jshref
+    m = re.search(r'data-jshref="(https://www\.nefisyemektarifleri\.com/(?!u/)[^"]+)"', chunk)
     url = m.group(1) if m else ""
     if not url:
         m = re.search(r'<a class="title" href="([^"]+)"', chunk)
@@ -142,7 +143,7 @@ def _parse_card(chunk: str) -> dict | None:
     author = author_url = None
     if om:
         tag = om.group(0)
-        hm = re.search(r'href="([^"]+)"', tag)
+        hm = re.search(r'data-jshref="([^"]+)"', tag) or re.search(r'\shref="(?!javascript:)([^"]+)"', tag)
         tm = re.search(r'title="([^"]+)"', tag)
         author_url = hm.group(1) if hm else None
         author = _clean(tm.group(1)) if tm else None
