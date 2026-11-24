@@ -73,9 +73,9 @@ def fetch_signed_in(url: str, data: dict | None = None) -> tuple[str, str]:
     attempts = 3 if data is None else 1  # reads are retried; a resent change could undo the first one
     try:
         for attempt in range(attempts):
-            _http._throttle()
             if attempt:
                 time.sleep(_http.MIN_INTERVAL * attempt)  # the site drops bursts at the TLS layer
+            _http._throttle()  # after the backoff, so the next request still keeps its distance
             try:
                 r = s.get(url, timeout=_http.TIMEOUT) if data is None else s.post(url, data=data, timeout=_http.TIMEOUT)
                 break
@@ -88,6 +88,8 @@ def fetch_signed_in(url: str, data: dict | None = None) -> tuple[str, str]:
                     ) from None
     finally:
         s.close()
+    if data is not None and r.text.strip() == "-1":  # WordPress rejects a stale token with -1 (HTTP 403)
+        raise _not_signed_in()
     if r.headers.get("cf-mitigated") or r.status_code in (403, 429):
         raise _http.NefisError("nefisyemektarifleri.com answered with a bot check; try again later in the browser")
     final = urlparse(r.url)
@@ -132,9 +134,13 @@ def pick_notebook(notebooks: list[dict], name: str | None) -> dict:
         raise _http.NefisError("no notebooks found on your account")
     if name is None:
         return notebooks[0]
-    for nb in notebooks:
-        if _R.slugify(nb["name"]) == _R.slugify(name):  # Turkish-safe: "TATLILAR" matches "Tatlılar"
-            return nb
+    exact = [nb for nb in notebooks if nb["name"].strip().lower() == name.strip().lower()]
+    # Turkish-safe fallback: "TATLILAR" matches "Tatlılar"; names with no letters (emoji) only match exactly
+    loose = [nb for nb in notebooks if _R.slugify(name) and _R.slugify(nb["name"]) == _R.slugify(name)]
+    if exact or len(loose) == 1:
+        return (exact or loose)[0]
+    if loose:
+        raise _http.NefisError(f"{name!r} matches more than one notebook: {', '.join(n['name'] for n in loose)}; use the exact name")
     raise _http.NefisError(f"no notebook named {name!r}; your notebooks: {', '.join(n['name'] for n in notebooks)}")
 
 

@@ -257,3 +257,36 @@ def test_notebook_card_links_to_the_recipe_not_the_author():
     assert card["url"] == BASE + "/beyaz-lahana-yemegi-1104525/"
     assert card["author"] == "Ece Karaosmanoğlu"
     assert card["author_url"] == BASE + "/u/huri_karaosmanoglueker/tarifler/"
+
+
+def test_rejected_token_sent_as_403_asks_for_a_fresh_session(session_file, monkeypatch):
+    use(monkeypatch, lambda req: (403, "-1", {}))
+    with pytest.raises(H.NefisError, match="(?i)cookie"):
+        N.fetch_signed_in(N.AJAX_URL, {"action": "add_to_collection"})
+
+
+def test_retry_waits_before_taking_its_turn(session_file, monkeypatch):
+    order = []
+    monkeypatch.setattr(N.time, "sleep", lambda s: order.append("sleep"))
+    monkeypatch.setattr(H, "_throttle", lambda *a: order.append("throttle"))
+    state = {"n": 0}
+
+    def handler(req):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise requests.ConnectionError("dropped")
+        return 200, "ok", {}
+    use(monkeypatch, handler)
+    N.fetch_signed_in(BASE + "/a/")
+    assert order == ["throttle", "sleep", "throttle"]
+
+
+def test_pick_notebook_prefers_exact_names_and_refuses_ambiguity():
+    nbs = [{"id": "1", "name": "Tatlı"}, {"id": "2", "name": "Tatlı!"}, {"id": "3", "name": "🍰"}, {"id": "4", "name": "🍩"}]
+    assert N.pick_notebook(nbs, "Tatlı!")["id"] == "2"
+    assert N.pick_notebook(nbs, "tatlı")["id"] == "1"
+    assert N.pick_notebook(nbs, "🍩")["id"] == "4"
+    with pytest.raises(H.NefisError):
+        N.pick_notebook(nbs, "🍪")
+    with pytest.raises(H.NefisError, match="more than one"):
+        N.pick_notebook(nbs, "TATLI?")
