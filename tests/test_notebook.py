@@ -224,3 +224,20 @@ def test_site_failures_become_errors(monkeypatch, reply, error):
 def test_non_recipe_page_is_refused(monkeypatch):
     monkeypatch.setattr(N, "fetch_signed_in", lambda url, data=None: (url, "<script>nyt_user_nonce = 'x';</script>"))
     assert "recipe" in call(S.nefis_add_to_notebook, "kategori/tatlilar")["error"]
+
+
+def test_reads_are_retried_after_network_errors_but_changes_are_not(session_file, monkeypatch):
+    attempts = []
+
+    def handler(req):
+        attempts.append(req.method)
+        if len(attempts) < 3 or req.method == "POST":
+            raise requests.ConnectionError("TLS dropped")
+        return 200, "ok", {}
+    use(monkeypatch, handler)
+    assert N.fetch_signed_in(BASE + "/a/") == (BASE + "/a/", "ok")
+    assert attempts == ["GET"] * 3
+    attempts.clear()
+    with pytest.raises(H.NefisError, match="may or may not"):
+        N.fetch_signed_in(N.AJAX_URL, {"action": "add_to_collection"})
+    assert attempts == ["POST"]

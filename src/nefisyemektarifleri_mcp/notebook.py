@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -69,14 +70,22 @@ def _session() -> requests.Session:
 def fetch_signed_in(url: str, data: dict | None = None) -> tuple[str, str]:
     """GET (or POST form `data`) with the saved session. Returns (final_url, text)."""
     s = _session()
-    _http._throttle()
+    attempts = 3 if data is None else 1  # reads are retried; a resent change could undo the first one
     try:
-        r = s.get(url, timeout=_http.TIMEOUT) if data is None else s.post(url, data=data, timeout=_http.TIMEOUT)
-    except requests.RequestException as e:  # never retried: a resent change could undo the first one
-        raise _http.NefisError(
-            f"network error ({type(e).__name__}) for {urlparse(url).path}"
-            + ("; the notebook may or may not have changed, check with nefis_list_notebook" if data is not None else "")
-        ) from None
+        for attempt in range(attempts):
+            _http._throttle()
+            if attempt:
+                time.sleep(_http.MIN_INTERVAL * attempt)  # the site drops bursts at the TLS layer
+            try:
+                r = s.get(url, timeout=_http.TIMEOUT) if data is None else s.post(url, data=data, timeout=_http.TIMEOUT)
+                break
+            except requests.RequestException as e:
+                if attempt == attempts - 1:
+                    raise _http.NefisError(
+                        f"network error ({type(e).__name__}) for {urlparse(url).path}"
+                        + ("; the notebook may or may not have changed, check with nefis_list_notebook"
+                           if data is not None else "")
+                    ) from None
     finally:
         s.close()
     if r.headers.get("cf-mitigated") or r.status_code in (403, 429):
