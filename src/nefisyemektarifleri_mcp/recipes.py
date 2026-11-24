@@ -112,7 +112,7 @@ def _datalayer(html: str) -> dict | None:
 
 # ---------------------------------------------------------------- cards
 
-_CARD_SPLIT = re.compile(r'<div class="recipe-cards">')
+_CARD_SPLIT = re.compile(r'<div class="recipe-cards\s*">')  # notebook pages write "recipe-cards "
 
 
 def _parse_card(chunk: str) -> dict | None:

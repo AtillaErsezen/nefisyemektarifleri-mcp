@@ -6,20 +6,23 @@ from datetime import datetime, timezone
 
 from mcp.server.fastmcp import FastMCP
 
+from mcp.types import ToolAnnotations
+
 from . import http as _http
+from . import notebook as _N
 from . import recipes as _R
 
 mcp = FastMCP("nefisyemektarifleri-mcp")
 
 INSTRUCTIONS = """\
-Unofficial read-only MCP server for Nefis Yemek Tarifleri \
+Unofficial MCP server for Nefis Yemek Tarifleri \
 (nefisyemektarifleri.com), Türkiye's biggest recipe site — search \
 14,000+ recipes per query, full recipe details (ingredients with \
 amounts, steps, tips, times, servings, ratings, nutrition), the full \
 recipe-category tree, category listings with popular/trending/newest \
 sorts, the most-made recipes and the daily "Bugün Ne Pişirsem?" menu. \
-No login, no API key. Times are Turkish shorthand (15dk); servings \
-are Turkish ("6-8 kişilik"). Read-only; transport uses Chrome TLS \
+No API key. Optional sign-in tools (nefis_list_notebook, nefis_add_to_notebook, nefis_remove_from_notebook) manage the user's own recipe notebook using a saved browser session. Times are Turkish shorthand (15dk); servings \
+are Turkish ("6-8 kişilik"). Recipe tools are read-only; their transport uses Chrome TLS \
 impersonation with a plain-requests fallback and always sends the \
 site as Referer (Cloudflare requires it on /ara/); requests are \
 spaced ~0.8s apart. Built by Mohammad Abbasi (mohammad-abbasi-sh) — https://almanibama.ir · https://mabbasi.ir — Turkey \
@@ -219,6 +222,39 @@ def nefis_health() -> str:
     rate limit) or error, plus the HTTP status and the probed URL.
     One polite request; it does not fetch any listings."""
     return _ok(_http.health_check())
+
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+def nefis_list_notebook(notebook: str | None = None) -> str:
+    """Recipes in the user's own recipe notebook ("Tarif Defteri") on the site.
+    notebook: a notebook name; the first notebook when omitted.
+    Needs the user's saved browser session (see the README)."""
+    try:
+        return _ok(_N.list_notebook(notebook))
+    except (ValueError, _http.NefisError) as e:
+        return _err(e)
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+def nefis_add_to_notebook(url: str, notebook: str | None = None) -> str:
+    """Save a recipe to the user's recipe notebook ("Tarif Defteri") on the site.
+    url: a recipe URL or slug. notebook: a notebook name; the first notebook when omitted.
+    Needs the user's saved browser session (see the README)."""
+    try:
+        return _ok(_N.set_in_notebook(url, notebook, add=True))
+    except (ValueError, _http.NefisError) as e:
+        return _err(e)
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=True))
+def nefis_remove_from_notebook(url: str, notebook: str | None = None) -> str:
+    """Remove a recipe from the user's recipe notebook ("Tarif Defteri") on the site.
+    url: a recipe URL or slug. notebook: a notebook name; the first notebook when omitted."""
+    try:
+        return _ok(_N.set_in_notebook(url, notebook, add=False))
+    except (ValueError, _http.NefisError) as e:
+        return _err(e)
 
 
 def main() -> None:
